@@ -1,15 +1,45 @@
+# This script builds the Photon static assets for the mobile app, 
+# copies the dist to the app's assets directory, and runs the app on android.
+
 param(
   [string]$BackendUrl = "http://10.0.2.2:1236",
   [string]$InstanceUrl = ""
 )
 
+# cancel on any error
 $ErrorActionPreference = "Stop"
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$photonRoot = Join-Path $repoRoot "photon"
+
+# Paths are configured via .env only
+$repoRoot = $env:REPO_ROOT
+$photonRoot = $env:PHOTON_ROOT
 $mobileRoot = Join-Path $repoRoot "mobile-app"
-$webAssets = Join-Path $mobileRoot "android\app\src\main\assets\photon"
+$webAssets = $env:WEB_ASSETS
+
+if (-not $repoRoot) { throw "REPO_ROOT not set in .env" }
+if (-not $photonRoot) { throw "PHOTON_ROOT not set in .env" }
+if (-not $webAssets) { throw "WEB_ASSETS not set in .env" }
+
 if (-not $InstanceUrl) { $InstanceUrl = $BackendUrl }
 
+# Load all variables from .env file
+$envFile = Join-Path $PSScriptRoot ".env"
+if (Test-Path $envFile) {
+    $envContent = Get-Content $envFile -Raw
+    $lines = $envContent -split "`r?`n"
+    foreach ($line in $lines) {
+        $line = $line.Trim()
+        if ($line -and $line -notmatch '^[#;]') {
+            $parts = $line -split '=', 2
+            if ($parts.Count -eq 2) {
+                $key = $parts[0].Trim()
+                $value = $parts[1].Trim()
+                $env:$key = $value
+            }
+        }
+    }
+}
+
+# Build Photon static assets for Android WebView
 Push-Location $photonRoot
 try {
   $previousAdapter = $env:ADAPTER
@@ -43,22 +73,22 @@ if ($androidEntryPath -ne $androidDestination) {
   Copy-Item -LiteralPath $androidEntry -Destination $androidDestination -Force
 }
 
+# Copy the Photon static build output to the Android app's assets directory
 if (Test-Path $webAssets) {
   Remove-Item -LiteralPath $webAssets -Recurse -Force
 }
 New-Item -ItemType Directory -Path $webAssets -Force | Out-Null
 Copy-Item -Path (Join-Path $buildOutput "*") -Destination $webAssets -Recurse -Force
 
+# Run the Android build and launch the emulator
 Push-Location $mobileRoot
 try {
   if (-not (Test-Path (Join-Path $mobileRoot "node_modules\react-native-webview\package.json"))) {
     throw "Install mobile-app dependencies first (npm install)"
   }
-  $previousCleartext = $env:TRYNAM_ALLOW_CLEARTEXT
-  $env:TRYNAM_ALLOW_CLEARTEXT = "1"
+  
   npm.cmd run android
   if ($LASTEXITCODE -ne 0) { throw "Android build or launch failed" }
 } finally {
-  $env:TRYNAM_ALLOW_CLEARTEXT = $previousCleartext
   Pop-Location
 }
