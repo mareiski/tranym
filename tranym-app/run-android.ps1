@@ -47,6 +47,7 @@ $mobileRoot = Join-Path $repoRoot "mobile-app"
 if (-not $InstanceUrl) { $InstanceUrl = $BackendUrl }
 
 if ($photonMode -notin @("static", "dev")) { throw "PHOTON_MODE must be 'static' or 'dev'" }
+$env:EXPO_PUBLIC_PHOTON_MODE = $photonMode
 
 $repoRootBase = Split-Path -Parent $PSScriptRoot
 if (-not [IO.Path]::IsPathRooted($repoRoot)) { $repoRoot = Join-Path $repoRootBase $repoRoot }
